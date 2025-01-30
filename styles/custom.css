@@ -1,0 +1,89 @@
+ .slide { /* General slide styles */
+      background-color: #f8f8f8;
+      color: #333;
+      padding: 20px;
+    }
+
+    .slide h2 { /* Slide title styles */
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .adapter-card { /* Adapter card styles */
+      background-color: #fff;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      max-width: 800px; /* Adjust as needed */
+      margin: 0 auto;   /* Center horizontally */
+    }
+
+    .adapter-card h3 { /* Adapter type title styles */
+      color: #0077cc;
+      margin-bottom: 10px;
+    }
+
+    .adapter-card p { /* Adapter description styles */
+      font-size: 1em;
+      line-height: 1.5;
+    }
+
+    .adapter-card ul { /* Adapter feature list styles */
+      list-style-type: disc;
+      margin-left: 20px;
+      font-size: 1em;
+    }
+
+    .adapter-card li { /* List item styles */
+      margin-bottom: 5px;
+    }
+    
+    /* Parameter Efficiency Slide Styles */
+    .parameter-efficiency-slide h2 {
+        margin-bottom: 10px;
+    }
+    .parameter-efficiency-slide .content {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      margin-bottom: 20px;
+    }
+
+    .parameter-efficiency-slide .text-content {
+        text-align: center;
+        padding: 0 20px;
+    }
+
+    .parameter-efficiency-slide .comparison-table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    .parameter-efficiency-slide .comparison-table th,
+    .parameter-efficiency-slide .comparison-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+
+    .parameter-efficiency-slide .comparison-table th {
+      background-color: #f0f0f0;
+    }
+    .parameter-efficiency-slide .image-container {
+        display: flex;
+        justify-content: center;
+    }
+    .parameter-efficiency-slide img {
+      max-width: 400px;
+      height: auto;
+    }
+
+    .parameter-efficiency-slide .bullets {
+      margin-top: 20px;
+    }
+
+    .parameter-efficiency-slide .bullets ul {
+      list-style-type: disc;
+      margin-left: 40px;
+    }
