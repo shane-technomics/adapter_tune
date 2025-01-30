@@ -2,10 +2,17 @@
   const titleSlide = document.querySelector('.slide'); // First slide
   const dynamicText = titleSlide.querySelector('.dynamic-text');
   const phrases = [
-    "efficiency",
-    "performance",
-    "cost effectiveness",
-    "domain specific modeling"
+    "parameter-efficient",
+    "resource-efficient",
+    "lightweight", 
+    "scalable",
+    "modular",
+    "robust",
+    "adaptable",
+    "economical",
+    "customizable",
+    "task-specific",
+    "future-proof"
   ];
   let phraseIndex = 0;
   let charIndex = 0;

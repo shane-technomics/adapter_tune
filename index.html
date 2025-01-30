@@ -8,10 +8,10 @@
   <link rel="stylesheet" type="text/css" href="styles/prism.css">
   <link rel="stylesheet" type="text/css" href="styles/custom.css">
 
-     
 </head>
 <body>  
 <article class="deck">
+
   <!-- Title Slide -->
     <section class="slide">
       <div class="image-container">
@@ -19,11 +19,12 @@
       </div>
       <div class="text-container">
         <h2>Adapter Tuning</h2>
-        <div>
-          <p>Improve <span class="dynamic-text"></span></p>
+        <div> 
+          <p>Become <span class="dynamic-text"></span></p>
         </div>
       </div>
     </section>  
+    
     <!-- Challenges -->
     <section class="slide">
       <h2>🔥 Challenges of Fine-tuning Transformers 🔥</h2>
@@ -35,6 +36,7 @@
           <li><b>Hyperparameter Sensitivity:</b> Difficult to tune optimally.</li>
       </ul>
     </section>
+    
     <!-- Overview -->    
     <section class="slide">
       <h2>Adapter Overview</h2>
@@ -59,6 +61,7 @@
         </span>
       </p>
     </section>
+    
       <!-- LoRA-->
     <section class="slide">
         <h1> LoRA </h1>
@@ -71,6 +74,7 @@
         <li><b>A has r x C= 20K x 4 = 80K elements</b></li>
       </ul>
     </section>   
+    
      <!-- Types -->
 <section class="slide">
       <h2>Overview of Adapter Types</h2>
@@ -131,43 +135,40 @@
         </ul>
       </div>
     </section>
+    
     <!-- Parameter efficiency -->
- <section class="slide parameter-efficiency-slide">
-      <h2>Parameter Efficiency</h2>
-
-      <div class="content">
-        <div class="image-container">
-          <img src="images/parameter_efficiency.jpg" alt="Parameter Efficiency">
-        </div>
-        <div class="text-content">
-          <table class="comparison-table">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Trainable Parameters</th>
-              </tr> 
-            </thead>
-            <tbody>
-              <tr>
-                <td>Fine-tuning</td>
-                <td>~110M (full model)</td>
-              </tr>
-              <tr>
-                <td>Adapter</td>
-                <td>~1-3M (adapter layers only)</td>
-              </tr>
-              <tr>
-                <td>LoRA</td>
-                <td>~0.1M (low-rank matrices)</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-  
-    </section>
-
+    <section class="slide parameter-efficiency-slide">
+         <h2>Parameter Efficiency</h2>
+         <div class="content">
+           <div class="image-container">
+             <img src="images/parameter_efficiency.jpg" alt="Parameter Efficiency">
+           </div>
+           <div class="text-content">
+             <table class="comparison-table">
+               <thead>
+                 <tr>
+                   <th>Model</th>
+                   <th>Trainable Parameters</th>
+                 </tr> 
+               </thead>
+               <tbody>
+                 <tr>
+                   <td>Fine-tuning</td>
+                   <td>~110M (full model)</td>
+                 </tr>
+                 <tr>
+                   <td>Adapter</td>
+                   <td>~1-3M (adapter layers only)</td>
+                 </tr>
+                 <tr>
+                   <td>LoRA</td>
+                   <td>~0.1M (low-rank matrices)</td>
+                 </tr>
+               </tbody>
+             </table>
+           </div>
+         </div>
+     </section>
     <!-- Architecture -->
   <section class="slide">  
     <h2>Architecture and Placement</h2>
@@ -178,7 +179,7 @@
       <h2>Training Process</h2>
       <h3>Powered by <a href="https://github.com/bespokejs/bespoke-scale">bespoke-scale</a></h3>
     </section> 
-    <!-- REMOVE --> 
+    <!-- REMOVE?? --> 
   <section class="slide">
     <h2>Advantages</h2>
     <h3>Powered by <a href="https://github.com/bespokejs/bespoke-bullets">bespoke-bullets</a></h3>
@@ -201,15 +202,11 @@ function hanoi (n, a, b, c) {
 console.log(hanoi(3, 'left', 'right', 'mid')
   .map((d) => `${d[0]} -> ${d[1]}`))</code></pre>
   </section>
- 
-  
 </article>
 
 <script src="build/build.js"></script>
 <script src="scripts/dynamic.js"></script>
 <script src="scripts/prism.js"></script>
 
-  
- 
 </body>
 </html>
