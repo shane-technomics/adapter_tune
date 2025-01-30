@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+  <title>Adapter Tuning</title>
+  <link rel="stylesheet" type="text/css" href="build/build.css">
+  <link rel="stylesheet" type="text/css" href="prism/prism.css">
+  <link rel="stylesheet" type="text/css" href="styles/custom.css">
+
+     
+</head>
+<body> 
+<article class="deck">
+  <!-- Title Slide -->
+    <section class="slide">
+      <div class="image-container">
+        <img src="images/intro_image.jpg" alt="Intro Image">
+      </div>
+      <div class="text-container">
+        <h2>Adapter Tuning</h2>
+        <div>
+          <p>Improve <span class="dynamic-text"></span></p>
+        </div>
+      </div>
+    </section>  
+    <!-- Challenges -->
+    <section class="slide">
+      <h2>🔥 Challenges of Fine-tuning Transformers 🔥</h2>
+      <ul class="challenge-list">
+          <li><b>High Compute Costs:</b> Training is expensive and slow.</li>
+          <li><b>Huge Storage Needs:</b> Billions of parameters require massive storage.</li>
+          <li><b>Catastrophic Forgetting:</b> Models can forget prior knowledge.</li>
+          <li><b>Data Hungry:</b> Requires extensive task-specific data.</li>
+          <li><b>Hyperparameter Sensitivity:</b> Difficult to tune optimally.</li>
+      </ul>
+    </section>
+    <!-- Overview -->    
+    <section class="slide">
+      <h2>Adapter Overview</h2>
+      <p><b>Gradient decent update</b></p>
+      <p class="equation"> 
+          θ<sub>t</sub> ← θ<sub>t-1</sub> - α∇<sub>θ</sub>ℒ|<sub>θ=θ<sub>t-1</sub></sub>
+          </p>
+          <p><b>trained model</b></p>
+          <p class="equation">
+          θ<sub>T</sub> = θ<sub>0</sub> - α∇<sub>θ</sub>ℒ|<sub>θ=θ<sub>0</sub></sub> - α∇<sub>θ</sub>ℒ|<sub>θ=θ<sub>1</sub></sub> ... - α∇<sub>θ</sub>ℒ|<sub>θ=θ<sub>T-1</sub></sub>
+          </p>
+      <p><b>A fine-tuned model</b></p>
+      <p class="equation">
+        θ<sub>F</sub> = 
+        <span class="boxed trained-model">
+          θ<sub>0</sub> − α Σ<sup>T-1</sup> ∇<sub>θ</sub>ℒ|<sub>θ=θ<sub>t</sub></sub> 
+          <br><small>trained model</small>
+        </span>
+        <span class="boxed fine-tuning">
+          − α Σ<sup>T+F</sup> ∇<sub>θ</sub>ℒ|<sub>θ=θ<sub>t</sub></sub>
+          <br><small>fine-tuning data</small>
+        </span>
+      </p>
+    </section>
+      <!-- LoRA-->
+    <section class="slide">
+        <h1> LoRA </h1>
+      <div class="image-container">  
+        <img src="images/lora.png" alt="LoRA Diagram">
+      </div>
+      <ul class="lower-bullets">  
+        <li><b>ΔW has R x C =  10K x 20K = 200M elements</b></li>
+        <li><b>B has R x r = 10K x 4 = 40K elements</b></li>
+        <li><b>A has r x C= 20K x 4 = 80K elements</b></li>
+      </ul>
+    </section>   
+     <!-- Types -->
+<section class="slide">
+      <h2>Overview of Adapter Types</h2>
+      <div class="adapter-card">
+        <h3>Introduction</h3>
+        <p>Adapters are a recent innovation in transfer learning for NLP that offer a lightweight alternative to fine-tuning. This section provides an overview of common adapter architectures.</p>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="adapter-card">
+        <h3>Houlsby Adapter</h3>
+        <p>Inserts two adapter layers after the feed-forward network within each transformer block.</p>
+        <ul>
+          <li><b>Placement:</b> After both the attention layer and the FFN layer.</li>
+          <li><b>Design:</b> Bottleneck architecture with two layers, one down-projecting and one up-projecting.</li>
+          <li><b>Pros:</b> Relatively high performance.</li>
+          <li><b>Cons:</b> Adds more parameters compared to other adapter types.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="adapter-card">
+        <h3>Bottleneck Adapter (Pfeiffer Adapter)</h3>
+        <p>The most common type, adds a bottleneck adapter after the feed-forward layer of each transformer block.</p>
+        <ul>
+          <li><b>Placement:</b> After FFN or the attention layer.</li>
+          <li><b>Design:</b> Down-projects the input to a smaller dimension, applies a non-linearity, and then up-projects back to the original dimension.</li>
+          <li><b>Pros:</b> Good performance-parameter efficiency trade-off.</li>
+          <li><b>Cons:</b> Might be less effective for tasks heavily relying on attention mechanisms.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="adapter-card">
+        <h3>Parallel Adapter</h3>
+        <p>Adds an adapter in parallel to the feed-forward network or attention layer.</p>
+        <ul>
+          <li><b>Placement:</b> Parallel to the FFN or the attention layer.</li>
+          <li><b>Design:</b> Similar to bottleneck adapter but applied in parallel. The outputs are combined, often through addition.</li>
+          <li><b>Pros:</b> Can achieve better performance than sequential adapters.</li>
+          <li><b>Cons:</b> More complex to implement.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="slide">
+      <div class="adapter-card">
+        <h3>LoRA (Low-Rank Adaptation)</h3>
+        <p>Decomposes the weight updates into two smaller, low-rank matrices. Often used to reduce the number of trainable parameters in fine-tuning.</p>
+        <ul>
+          <li><b>Placement:</b> In parallel to the weight matrices of different layers (e.g. query, key, value matrices of the attention layer).</li>
+          <li><b>Design:</b> Introduces two matrices A and B. A down-projects, B up-projects, and their product approximates the weight update.</li>
+          <li><b>Pros:</b> Extremely parameter-efficient.</li>
+          <li><b>Cons:</b> Might require careful tuning of the rank hyperparameter.</li>
+        </ul>
+      </div>
+    </section>
+    <!-- Parameter efficiency -->
+ <section class="slide parameter-efficiency-slide">
+      <h2>Parameter Efficiency</h2>
+
+      <div class="content">
+        <div class="image-container">
+          <img src="images/parameter_efficiency.jpg" alt="Parameter Efficiency">
+        </div>
+        <div class="text-content">
+          <table class="comparison-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Trainable Parameters</th>
+              </tr> 
+            </thead>
+            <tbody>
+              <tr>
+                <td>Fine-tuning</td>
+                <td>~110M (full model)</td>
+              </tr>
+              <tr>
+                <td>Adapter</td>
+                <td>~1-3M (adapter layers only)</td>
+              </tr>
+              <tr>
+                <td>LoRA</td>
+                <td>~0.1M (low-rank matrices)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+
+    </section>
+
+    <!-- Architecture -->
+  <section class="slide">  
+    <h2>Architecture and Placement</h2>
+    <h3>Powered by <a href="https://github.com/bespokejs/bespoke-touch">bespoke-touch</a></h3>
+  </section>
+    <!-- Training -->
+    <section class="slide">
+      <h2>Training Process</h2>
+      <h3>Powered by <a href="https://github.com/bespokejs/bespoke-scale">bespoke-scale</a></h3>
+    </section> 
+    <!-- REMOVE --> 
+  <section class="slide">
+    <h2>Advantages</h2>
+    <h3>Powered by <a href="https://github.com/bespokejs/bespoke-bullets">bespoke-bullets</a></h3>
+    <ul class="build build-items">
+      <li>Efficiency and storage</li>
+      <li>Multitask learning</li> 
+      <li>Transfer and reinforcement scenarios</li>
+    </ul>
+  </section> 
+    <!-- Other areas -->
+  <section class="slide">
+    <h2>Connection to pruning and knowledge distillation</h2>
+    <h3>Powered by <a href="https://twitter.com/LeaVerou">Lea Verou</a>'s <a href="https://github.com/PrismJS/prism">Prism</a></h3>
+    <pre><code class="language-python">
+function hanoi (n, a, b, c) {
+  return n ? hanoi(n - 1, a, c, b)
+      .concat([[a, b]])
+      .concat(hanoi(n - 1, c, b, a)) : []
+}
+console.log(hanoi(3, 'left', 'right', 'mid')
+  .map((d) => `${d[0]} -> ${d[1]}`))</code></pre>
+  </section>
+ 
+  
+</article>
+
+<script src="build/build.js"></script>
+<script src="scripts/dynamic.js"></script>
+<script src="prism/prism.js"></script>
+
+  
+ 
+</body>
+</html>
