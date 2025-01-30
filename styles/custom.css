@@ -87,3 +87,57 @@
       list-style-type: disc;
       margin-left: 40px;
     }
+    
+<style>
+  .slide {
+    display: flex;             /* Enables Flexbox */
+    flex-direction: column;  /* Stack image and bullets vertically */
+    align-items: center;     /* Center content horizontally */
+  }
+
+  .image-container {
+    flex-grow: 1;            /* Image takes up available space */
+    display: flex;           /* Center image within container */
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    overflow: hidden;       /* Hide image overflow */
+  }
+
+  .image-container img {
+      max-width: 100%;
+      max-height: 80vh; /* Prevent image from exceeding slide height */
+  }
+
+  .lower-bullets {
+    text-align: center;  /* Center the bullet points */
+    list-style-position: inside;
+    padding: 10px 0;    /* Add some padding */
+    width: 80%;         /* Limit width of bullet point container*/
+  }
+
+  h2 {  /*  If you still want a heading, style it appropriately */
+    margin-bottom: 10px;
+    text-align: center;
+  }
+  
+  .equation {
+  font-family: serif;
+  font-size: 1.2em;
+}
+.boxed {
+  border: 2px solid;
+  padding: 5px;
+  display: inline-block; /* Allows the boxes to sit next to each other */
+  margin-right: 10px;
+}
+.trained-model {
+  border-color: red;
+  color: red; /* Label color matches border */
+
+}
+.fine-tuning {
+  border-color: mediumseagreen;
+  color: mediumseagreen; /* Label color matches border */
+
+}
