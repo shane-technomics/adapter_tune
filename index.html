@@ -169,39 +169,514 @@
            </div>
          </div>
      </section>
+     
+    <!-- Data Prep -->
+    <section class="slide"> 
+      <h2>Data Preparation</h2>
+          <pre><code class="language-python" style="font-size: 0.6em; white-space: pre-wrap; word-wrap: break-word; font-family: 'Source Code Pro', monospace; max-width: 100%; width: 95vw;">
+    
+     def create_messages_and_prompt(comment, label):
+         """Creates the messages list and formatted prompt for a single comment."""
+         formatted_content = content.format(comment.replace("\n", " "))
+
+         messages = [
+             {"role": "user",
+              "content": formatted_content 
+             },
+             {"role": "assistant",
+              "content": str(label)
+             }
+         ]
+         return messages
+
+     # Function to create the prepared fine-tuning data from dataframe
+     def prepare_fine_tuning_data(df):
+         """Prepares the fine-tuning data from a Pandas DataFrame."""
+         fine_tuning_data = []
+
+         for _, row in df.iterrows():
+             comment = row['comments']
+             label = int(row['labels'])
+             messages = create_messages_and_prompt(comment, label)
+             fine_tuning_data.append(messages)
+         return fine_tuning_data</code></pre>
+    
+    </section> 
     <!-- Architecture -->
   <section class="slide">  
     <h2>Architecture and Placement</h2>
-    <h3>Powered by <a href="https://github.com/bespokejs/bespoke-touch">bespoke-touch</a></h3>
+        <pre><code class="language-python" style="font-size: 0.6em; white-space: pre-wrap; word-wrap: break-word; font-family: 'Source Code Pro', monospace; max-width: 100%; width: 95vw;">
+   class MyLoggingCallback(TrainerCallback):
+       """
+       A custom callback for logging specific training metrics
+       at each logging step.
+
+       This callback extends the `TrainerCallback` class and overrides
+       the `on_log` and `on_step_end` methods to customize the logging
+       behavior during training.
+       It logs information such as training loss, evaluation loss,
+       evaluation runtime, and evaluation samples/steps per second.
+       """
+
+       def on_log(
+           self,
+           args: TrainingArguments,
+           state: TrainerState,
+           control: TrainerControl,
+           logs: Optional[Dict[str, float]] = None,
+           **kwargs: Any,
+       ):
+           """
+           Event called after logging the last logs.
+
+           Args:
+               args (TrainingArguments): The training arguments used
+                   for the current training run.
+               state (TrainerState): The current state of the trainer.
+               control (TrainerControl): The control object that enables
+                   modification of training behavior.
+               logs (dict, optional): The logs to be recorded. Defaults to None.
+           """
+
+           _ = logs.pop("total_flos", None)
+           if state.is_local_process_zero:
+               print(logs)
+
+       def on_step_end(
+           self,
+           args: TrainingArguments,
+           state: TrainerState,
+           control: TrainerControl,
+           model: Optional[PreTrainedModel] = None,
+           **kwargs: Any,
+       ):
+           """
+          Event called at the end of each training step.
+
+          Args:
+              args (TrainingArguments): The training arguments used for the
+                  current training run.
+              state (TrainerState): The current state of the trainer.
+              control (TrainerControl): The control object that enables
+                  modification of training behavior.
+              model (PreTrainedModel, optional): The model being trained.
+                  Defaults to None.
+          """
+
+           if state.global_step % args.logging_steps == 0:
+               logs = {}
+               logs["step"] = state.global_step
+
+               if len(state.log_history) > 0:
+                   if 'loss' in state.log_history[-1]:
+                       logs["loss"] = state.log_history[-1]['loss']
+                   if 'grad_norm' in state.log_history[-1]:
+                       logs["grad_norm"] = state.log_history[-1]['grad_norm']
+                   if 'eval_loss' in state.log_history[-1]:
+                       logs["eval_loss"] = state.log_history[-1]['eval_loss']
+                   if 'eval_runtime' in state.log_history[-1]:
+                       logs["eval_runtime"] = \
+                           state.log_history[-1]['eval_runtime']
+                   if 'eval_samples_per_second' in state.log_history[-1]:
+                       logs["eval_samples_per_second"] = \
+                           state.log_history[-1]['eval_samples_per_second']
+                   if 'eval_steps_per_second' in state.log_history[-1]:
+                       logs["eval_steps_per_second"] = \
+                           state.log_history[-1]['eval_steps_per_second']
+
+               # Log the metrics using the Trainer's log method
+               control.should_log = True
+
+           return control
+
+
+   class PhiTrainer:
+       """
+       A class for fine-tuning the Phi model using LoRA (Low-Rank Adaptation).
+
+       This class handles the entire process of preparing the data,
+       configuring the model, setting up the trainer, and executing the
+       training loop for fine-tuning the Phi model with LoRA applied to
+       specific modules.
+       """
+
+       def __init__(
+           self,
+           base_model: Any,  # Replace Any with the actual type of your base model if known
+           tokenizer_path: str = "models/phi_3_instruct_tokenizer",
+           finetune_data_path: str = "data/adapterDataTuning.csv",
+           base_data_path: str = "data/ca_data_v3.csv",
+           output_dir: str = "output",
+           run_name: str = "run1",
+           target_modules: List[str] = [
+               "q_proj",
+               "k_proj",
+               "v_proj",
+               "o_proj",
+               "gate_proj",
+               "down_proj",
+               "up_proj",
+               "lm_head",
+           ],
+       ):
+
+           self.base_model = base_model
+           self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+           torch.random.manual_seed(0)
+           self.tokenizer_path = tokenizer_path
+           self.finetune_data_path = finetune_data_path
+           self.base_data_path = base_data_path
+           self.target_modules = target_modules
+           self.output_dir = output_dir
+           self.run_name = run_name
+           self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+           self.accelerator = Accelerator()
+           self.logging_steps = 1
+
+           # Hyperparameters
+           self.per_device_train_batch_size = 4
+           self.gradient_accumulation_steps = 2
+           self.optim = 'adamw_torch_fused'
+           self.learning_rate = 1e-4
+           self.max_grad_norm = 0.3
+           self.warmup_ratio = 0.03
+           self.lr_scheduler_type = "linear"
+           self.num_train_epochs = 1.0
+
+           # lora hyperparameters
+           self.lora_dropout = 0.05
+           self.r = 16
+
+           self.tokenizer_path = "models/phi_3_instruct_tokenizer"
+
+           self.tokenizer = AutoTokenizer.from_pretrained(
+               self.tokenizer_path,
+               model_max_length=512,
+               padding_side="right",
+               add_eos_token=True)
+
+           self.tokenizer.pad_token = self.tokenizer.eos_token
+           self.accelerator = Accelerator()
+           self.prepare_data()
+           self.setup_model()
+           self.setup_trainer()
+
+       def update_hyperparameters(self,  params: Dict[str, Any]):
+           """
+           Updates the hyperparameters of the trainer.
+
+           Args:
+               params (dict): A dictionary containing the
+               hyperparameters to update.
+           """
+
+           for key, value in params.items():
+               setattr(self, key, value)  # Directly sets the attribute
+
+           self.setup_model()  # recreate the model and apply new LoRA configs
+           self.setup_trainer()
+
+       def tokenize(self, prompt: Dict[str, str]) -> Dict[str, List[int]]:
+           """
+           Tokenizes a single prompt.
+
+           Args:
+               prompt (dict): A dictionary containing the text to tokenize.
+
+           Returns:
+               dict: The tokenized prompt with input_ids and attention_mask.
+           """
+
+           result = self.tokenizer(
+               prompt['text'],
+               truncation=True,
+               max_length=512,
+               padding="max_length",
+           )
+           result["labels"] = result["input_ids"].copy()
+           return result
+
+       def prepare_data(self):
+           """
+           Prepares the training and evaluation datasets
+           by loading and tokenizing the data.
+           """
+
+           df_finetune = pd.read_csv(self.finetune_data_path)
+           df_finetune = df_finetune[['Prompt', 'Response']]
+           df_finetune['text'] = df_finetune["Prompt"]+df_finetune["Response"]
+           df_finetune.drop(columns=['Prompt', 'Response'], inplace=True)
+           dataset = Dataset.from_pandas(df_finetune)
+
+           # Apply the tokenization function to the entire dataset
+           self.tokenized_datasets = dataset.map(
+               self.tokenize,
+               batched=True,
+               remove_columns=["text"],  # Remove the original text column
+           )
+           self.tokenized_datasets = self.tokenized_datasets.train_test_split(
+               test_size=0.1, seed=42)
+
+       def setup_model(self):
+           """
+           Sets up the model by applying LoRA configurations
+           and enabling gradient checkpointing.
+           """
+
+           base_model = self.base_model.model
+
+           for name, param in base_model.named_parameters():
+               param.requires_grad = False  # Freeze all base model layers
+
+           lora_config = LoraConfig(
+               r=self.r,
+               target_modules=self.target_modules,
+               lora_alpha=8,
+               lora_dropout=self.lora_dropout,
+               bias="none",
+               task_type="CAUSAL_LM",
+               init_lora_weights=True,
+               )
+
+           if hasattr(base_model, "enable_input_require_grads"):
+               base_model.enable_input_require_grads()
+           else:
+               def make_inputs_require_grad(module, input, output):
+                   output.requires_grad_(True)
+
+               base_model.get_input_embeddings().register_forward_hook(
+                   make_inputs_require_grad)
+
+           self.model = get_peft_model(base_model, lora_config)
+           for name, param in self.model.named_parameters():
+               if 'lora' in name:  # Check if LoRA parameter
+                   param.requires_grad = True
+
+           self.model.gradient_checkpointing_enable()
+
+           self.model.print_trainable_parameters()
+   #          Print parameter names and requires_grad status
+   #         for name, param in self.model.named_parameters():
+   #            print(f"  {name}: requires_grad={param.requires_grad}")
+
+       def setup_trainer(self):
+           """
+           Sets up the SFTTrainer with the appropriate
+           training arguments and datasets.
+           """
+           training_args = TrainingArguments(
+               output_dir=self.output_dir,
+               save_strategy="steps",
+               evaluation_strategy=IntervalStrategy.STEPS,
+               save_steps=self.logging_steps,
+               eval_steps=self.logging_steps,
+               logging_steps=self.logging_steps,
+               do_eval=True,
+               num_train_epochs=self.num_train_epochs,
+               per_device_train_batch_size=self.per_device_train_batch_size,
+               gradient_accumulation_steps=self.gradient_accumulation_steps,
+               gradient_checkpointing=True,
+               optim=self.optim,
+               learning_rate=self.learning_rate,
+               fp16=True,  # Check if your setup supports fp16
+               max_grad_norm=self.max_grad_norm,
+               warmup_ratio=self.warmup_ratio,
+               group_by_length=True,
+               lr_scheduler_type=self.lr_scheduler_type)
+
+           lora_params = []
+           for name, param in self.model.named_parameters():
+               if param.requires_grad:
+                   lora_params.append(param)
+
+   #        self.optimizer = AdamW(lora_params, lr=self.learning_rate)
+
+           self.trainer = SFTTrainer(  # Initialize your SFTTrainer
+               self.model,
+               train_dataset=self.tokenized_datasets['train'],
+               eval_dataset=self.tokenized_datasets['test'],
+               args=training_args,
+               callbacks=[MyLoggingCallback()],
+               #           optimizers=(self.optimizer, None,)
+               #           data_collator=data_collator
+           )
+
+   #         #self.trainer.processing_class = data_collator
+
+       def train(self):
+           """
+           Starts the training process and prints the
+           gradients of the model parameters.
+           """
+           self.trainer.train()
+           # Print gradients after a few steps
+
+           for name, param in self.model.named_parameters():
+               if param.grad is not None:
+                   print(f"Gradient of {name}:\n{param.grad}\n")</code></pre>
+      </section>
   </section>
     <!-- Training -->
     <section class="slide"> 
       <h2>Training Process</h2>
-      <h3>Powered by <a href="https://github.com/bespokejs/bespoke-scale">bespoke-scale</a></h3>
+          <pre><code class="language-python" style="font-size: 0.6em; white-space: pre-wrap; word-wrap: break-word; font-family: 'Source Code Pro', monospace; max-width: 100%; width: 95vw;">
+
+     class HyperparameterSearch:
+         """
+         A class for performing hyperparameter search using random search
+         and MLflow for tracking.
+
+         This class facilitates the exploration of a defined hyperparameter space
+         by training and evaluating
+         a model with different hyperparameter combinations. It uses MLflow
+         to log parameters, metrics, and models for each trial, helping to
+         identify the best hyperparameter set based on evaluation loss.
+
+         Attributes:
+             trainer (object): An instance of a trainer class (e.g., PhiTrainer)
+             that has methods for updating hyperparameters, training,
+             and evaluating the model.
+             search_space (dict): A dictionary defining the hyperparameter
+             search space. Keys are hyperparameter names, and values are
+             either lists of discrete values or tuples representing the lower
+             and upper bounds of a continuous range.
+             num_trials (int): The number of hyperparameter combinations
+             to evaluate.
+             best_loss (float): The best evaluation loss found so far.
+             Initialized to positive infinity.
+             best_params (dict): The hyperparameter combination that
+             resulted in the best loss.
+         """
+
+         def __init__(self,
+                      trainer,
+                      search_space,
+                      num_trials=3):
+             self.trainer = trainer
+             self.search_space = search_space
+             self.num_trials = num_trials
+             self.best_loss = float('inf')  # Initialize with a very high loss
+             self.best_params = {}
+
+         def train_and_evaluate(self, params):
+             """
+             Trains and evaluates the model with a given set of hyperparameters.
+
+             This method updates the trainer with the new hyperparameters,
+             trains the model,
+             evaluates it, logs parameters and metrics to MLflow, and saves
+             the best model based on evaluation loss.
+
+             Args:
+                 params (dict): A dictionary containing the hyperparameter
+                 combination to use for this trial.
+
+             Returns:
+                 float: The evaluation loss for this trial, or infinity
+                 if evaluation loss is not available.
+             """
+
+             try:
+                 mlflow.set_experiment("phi_hyperparam_search")
+             except Exception:
+                 experiment_id = mlflow.create_experiment("phi_hyperparam_search")
+                 mlflow.set_experiment(experiment_id=experiment_id)
+
+             with mlflow.start_run():
+                 print(f"Training with parameters: {params}")
+
+                 p = self.trainer  # Create a new PhiTrainer instance
+                 p.update_hyperparameters(params)  # Update hyperparameters
+
+                 # p.setup_model()
+
+                 for key, value in params.items():  # Log parameters
+                     mlflow.log_param(key, value)
+
+                 p.train()  # Train the model with the given parameters
+
+                 # Evaluate the model
+                 eval_metrics = p.trainer.evaluate()
+                 # Get eval loss or set to inf if not available
+                 eval_loss = eval_metrics.get("eval_loss", float('inf'))
+                 print('loss--' + str(eval_loss))
+                 mlflow.log_metric("eval_loss", eval_loss)  # Log the eval loss
+
+                 if eval_loss < self.best_loss:
+                     self.best_loss = eval_loss
+                     self.best_params = params
+                     p.model.save_pretrained("models/lora_best")  # Save best model
+
+                 return eval_loss
+
+         def run_search(self):
+             """
+            Runs the hyperparameter search for the specified number of trials.
+
+            This method iterates through the specified number of trials,
+            randomly sampling hyperparameter combinations from the defined
+            search space. For each combination, it calls `train_and_evaluate`
+            to train and evaluate the model, ultimately identifying and
+            printing the best hyperparameter set and its corresponding
+            evaluation loss.
+            """
+             for _ in range(self.num_trials):  # loop through all the search space
+                 params = {}
+                 for param_name, param_range in self.search_space.items():
+                     if isinstance(param_range, list):  # parameter is discrete.
+                         params[param_name] = random.choice(param_range)
+                     else:  # parameter is continous
+                         # take a uniform sample between min and max.
+                         params[param_name] = random.uniform(*param_range)
+
+                 self.train_and_evaluate(params)  # calls MLflow inside
+
+             print(f"Best loss: {self.best_loss}")
+             print(f"Best parameters: {self.best_params}")</code></pre>
+
     </section> 
-    <!-- REMOVE?? --> 
-  <section class="slide">
-    <h2>Advantages</h2>
-    <h3>Powered by <a href="https://github.com/bespokejs/bespoke-bullets">bespoke-bullets</a></h3>
-    <ul class="build build-items">
-      <li>Efficiency and storage</li>
-      <li>Multitask learning</li> 
-      <li>Transfer and reinforcement scenarios</li>
-    </ul>
-  </section> 
     <!-- Other areas --> 
-  <section class="slide">
-    <h2>Connection to pruning and knowledge distillation</h2>
-    <h3>Powered by <a href="https://twitter.com/LeaVerou">Lea Verou</a>'s <a href="https://github.com/PrismJS/prism">Prism</a></h3>
-    <pre><code class="language-python">
-function hanoi (n, a, b, c) {
-  return n ? hanoi(n - 1, a, c, b)
-      .concat([[a, b]])
-      .concat(hanoi(n - 1, c, b, a)) : []
-}
-console.log(hanoi(3, 'left', 'right', 'mid')
-  .map((d) => `${d[0]} -> ${d[1]}`))</code></pre>
-  </section>
+<section class="slide">
+  <h2>Adapter Tuning, Pruning, and Distillation</h2>
+
+  <div style="display: flex; justify-content: space-around;">
+
+    <div style="flex: 1; margin-right: 10px;">
+      <h3>Adapter Tuning</h3>
+      <ul>
+        <li><strong>What:</strong> Add small, trainable modules to a frozen model.</li>
+        <li><strong>How:</strong> New parameters; base model unchanged.</li>
+      </ul>
+    </div>
+
+    <div style="flex: 1; margin-right: 10px;">
+      <h3>Pruning</h3>
+      <ul>
+        <li><strong>What:</strong> Remove less important parts of a model.</li>
+        <li><strong>How:</strong> Remove existing parameters.</li>
+      </ul>
+    </div>
+
+    <div style="flex: 1;">
+      <h3>Distillation</h3>
+      <ul>
+        <li><strong>What:</strong> Train a small "student" model from a large "teacher".</li>
+        <li><strong>How:</strong> Student learns from teacher's outputs.</li>
+      </ul>
+    </div>
+
+  </div>
+
+  <h3>How They Work Together:</h3>
+
+  <ul>
+    <li><strong>Prune, then adapt:</strong> Prune a base model, *then* add adapters for efficiency.</li>
+    <li><strong>Distill, then adapt:</strong> Distill a smaller base, *then* add adapters.</li>
+    <li><strong>Prune adapters:</strong>  Make adapters smaller after training.</li>
+    <li><strong>Prune, then distill:</strong> Prune a teacher, *then* distill to a student.</li>
+  </ul>
+
+</section>
 </article>
 
 <script src="build/build.js"></script>
