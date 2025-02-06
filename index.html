@@ -202,9 +202,243 @@
          return fine_tuning_data</code></pre>
     
     </section> 
+         
     <!-- Architecture -->
+    <section class="slide"> 
+      <h2>Basic Architecture</h2>
+          <pre><code class="language-python" style="font-size: 0.6em; white-space: pre-wrap; word-wrap: break-word; font-family: 'Source Code Pro', monospace; max-width: 100%; width: 95vw;">
+    
+     def timer(func):
+         """Prints the runtime of the decorated function."""
+         @wraps(func)
+         def wrapper_timer(*args, **kwargs):
+             start_time = time.perf_counter()  # Start time
+             value = func(*args, **kwargs)
+             end_time = time.perf_counter()    # End time
+             run_time = end_time - start_time  # Run time
+             print(f"Finished {func.__name__!r} in {run_time:.4f} secs")
+             return value
+         return wrapper_timer
+
+     def check_and_log_gpu_memory(threshold_mb: Optional[int] = None):
+         """
+         Decorator to check and log GPU memory usage before and after function execution.
+
+         Args:
+             threshold_mb (Optional[int]): If provided, raises an error if the available 
+                                            GPU memory is below this threshold (in MB) 
+                                            before the function executes.
+         """
+         def decorator(func):
+             @wraps(func)
+             def wrapper(*args, **kwargs):
+                 if torch.cuda.is_available():
+                     device = torch.cuda.current_device()
+
+                     def get_memory_usage():
+                         memory_stats = torch.cuda.memory_stats(device=device)
+                         current_allocated = memory_stats["allocated_bytes.all.current"] / (1024**2)
+                         return current_allocated
+
+                     # Check memory before function execution
+                     memory_before = get_memory_usage()
+                     print(f"GPU Memory Used (Before {func.__name__}): {memory_before:.2f} MB")
+
+                     if threshold_mb is not None and memory_before < threshold_mb:
+                         raise RuntimeError(
+                             f"Available GPU memory ({memory_before:.2f} MB) is below "
+                             f"the threshold ({threshold_mb} MB) before executing {func.__name__}."
+                         )
+
+                     # Execute the function
+                     result = func(*args, **kwargs)
+
+                     # Check memory after function execution
+                     memory_after = get_memory_usage()
+                     print(f"GPU Memory Used (After {func.__name__}): {memory_after:.2f} MB")
+                 else:
+                     print("CUDA is not available. GPU memory check skipped.")
+                     result = func(*args, **kwargs)
+
+                 return result
+             return wrapper
+         return decorator
+
+
+
+     class PhiModel:
+         """
+         A class for performing text analysis,
+         specifically for evaluating justifications
+         provided in exception reports using a pre-trained language model (Phi-3).
+         """
+
+         def __init__(
+                self,
+                model_name: str = "microsoft/Phi-3.5-mini-instruct",
+                tokenizer_path: str = "models/phi_3_instruct_tokenizer",
+                peft_model_id: Optional[str] = None,
+                data: Optional[pd.DataFrame] = None,
+                message: Optional[List[Dict[str, str]]] = None,
+                ):
+             """
+             Initializes the phiModel class.
+
+             Args:
+                 model_name (str): The name of the base pre-trained
+                 language model to use.
+                 tokenizer_path (str): The path to the tokenizer to use.
+                 peft_model_id (str, optional): The path or id of the PEFT model.
+                 If None, uses the base model. Defaults to None.
+                 data (pd.DataFrame, optional): The input DataFrame
+                 containing the text data. Defaults to None.
+             """
+
+             self.data = Dataset.from_pandas(data)
+             bnb_config = BitsAndBytesConfig(
+                 load_in_8bit=True,
+                 #llm_int8_enable_fp32_cpu_offload=True,  # Enable CPU offloading!!
+                 #bnb_4bit_quant_type="nf4",  # or "fp4"
+                 #bnb_4bit_use_double_quant=True,
+                 #bnb_4bit_compute_dtype=torch.bfloat16,
+             )
+
+             # Load base model and tokenizer
+             self.model = AutoModelForCausalLM.from_pretrained(
+                     model_name,
+                     device_map="cuda" if torch.cuda.is_available()
+                     else "cpu",  # Use gpu if available
+                     torch_dtype="auto",
+                     trust_remote_code=True,
+                     attn_implementation="eager",
+                     quantization_config=bnb_config
+                     )
+
+             phi_tokenizer = AutoTokenizer.from_pretrained(tokenizer_path)
+
+             if peft_model_id:
+
+                 self.phi_pipe = pipeline(
+                     "text-generation",
+                     model=self.model,
+                     tokenizer=phi_tokenizer,
+                     torch_dtype=torch.bfloat16
+                 )
+                 self.phi_pipe.model = PeftModel.from_pretrained(
+                     self.model, peft_model_id)
+
+             else:
+                 # Create a text generation pipeline
+                 self.phi_pipe = pipeline(
+                     "text-generation",
+                     model=self.model,
+                     tokenizer=phi_tokenizer,
+                     torch_dtype=torch.bfloat16
+                 )
+
+             # Define generation arguments
+             self.generation_args = {
+                 "max_new_tokens": 2,  # Limit generated text length
+                 "return_full_text": False,  # Only return generated part
+                 "temperature": 0.001,  # (lower = more deterministic)
+                 "do_sample": True,  # more diverse outputs
+             }
+
+             self.message = message
+             
+         @timer
+         @check_and_log_gpu_memory(threshold_mb=500) 
+         def find_justification(self,text: str, max_length: int = 4096) -> int:
+             """
+             Evaluates the justification provided in the input 'text' using the
+             Phi-3 model and returns a grade (0-3) indicating its adequacy.
+
+             Args:
+                 text (str): The justification text to be evaluated.
+
+             Returns:
+                 int: The generated grade (0-1) as a integer.
+                  Returns -1 if the generation fails or
+                  the model produces an invalid output.
+             """
+             tokens = self.phi_pipe.tokenizer.tokenize(text)
+             if len(tokens) > max_length:
+                 tokens = tokens[:max_length]  # Truncate the tokens
+                 text = self.phi_pipe.tokenizer.convert_tokens_to_string(tokens)
+
+             messages = copy.deepcopy(self.message)
+             messages[0]['content'] = messages[0]['content'] + text
+
+             try:
+                 output = self.phi_pipe(messages,
+                                        **self.generation_args)[0]['generated_text']
+                 grade = int(output.strip())   # Convert to integer
+                 return grade if 0 <= grade <= 3 else -1
+             except (ValueError, IndexError) as e:
+                 print(f"Error during text generation: {e}")
+                 return -1
+
+         def get_parameter_count(self) -> Optional[int]:
+             """
+             Calculates and returns the total number of
+             parameters in the loaded Phi-3 model.
+
+             Returns:
+                 int: The total number of parameters in the model.
+                 Returns None if the model is not loaded correctly
+             """
+             if not hasattr(self, 'model') or self.model is None:
+                 print("Model not loaded correctly. Cannot return parameter count.")
+                 return None
+
+             total_params = sum(p.numel() for p in self.model.parameters())
+             return total_params
+
+
+     @timer
+     @check_and_log_gpu_memory() 
+     def process_data_in_chunks(pModel: PhiModel, chunk_size: int = 1):
+         """
+         Processes data in chunks, prints memory usage,
+         and applies find_justification.
+         """
+         outputArray = []
+         total_len = len(pModel.data)
+
+         for i in range(0, total_len, chunk_size):
+             gc.collect()
+             torch.cuda.empty_cache()
+
+             chunk_end = min(i + chunk_size, total_len)
+             chunk = pModel.data['REMARKS_COMMENTS'][i:chunk_end]
+
+             temp_output_array = []
+             for j, text in enumerate(chunk):
+                 try:
+                     outputString = pModel.find_justification(text)
+                     temp_output_array.append(outputString)
+                     print(i, j, temp_output_array)
+                     # print(torch.cuda.memory_summary())
+
+                 except Exception as e:
+                     print(f"Error processing row {i + j}: {e}")
+                     temp_output_array.append("None")
+
+             outputArray.extend(temp_output_array)
+
+             del chunk
+             del temp_output_array
+
+         new_data = pModel.data.add_column('ca_remarks_justification', outputArray)
+         pd.DataFrame(new_data).to_json('data/phi3_justifications_remarks.json')
+
+         del new_data
+         gc.collect()</code></pre>
+    
+    </section> 
+    <!-- adapter placement -->
   <section class="slide">  
-    <h2>Architecture and Placement</h2>
+    <h2>Adapter Placement</h2>
         <pre><code class="language-python" style="font-size: 0.6em; white-space: pre-wrap; word-wrap: break-word; font-family: 'Source Code Pro', monospace; max-width: 100%; width: 95vw;">
    class MyLoggingCallback(TrainerCallback):
        """
